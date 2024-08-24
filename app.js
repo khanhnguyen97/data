@@ -37,11 +37,11 @@ const MAX_CONNECTIONS = config.max_connections || 100;
 let connections = 0;
 
 const logging = () => {
-  console.clear();
-  console.log(`\x1b[35mPROXY v1.0.1\n\x1b[0m`);
-  console.log(`\x1b[32mProxy Port       : ${PORT}\n\x1b[0m`);
-  console.log(`\x1b[32mMax Connections  : ${MAX_CONNECTIONS}\n\x1b[0m`);
-  console.log(`\x1b[32mLisence Active   : ${isActive(config) ? 'ON': 'OFF'}\n\x1b[0m`);
+  // console.clear();
+  // console.log(`\x1b[35mPROXY v1.0.1\n\x1b[0m`);
+  // console.log(`\x1b[32mProxy Port       : ${PORT}\n\x1b[0m`);
+  // console.log(`\x1b[32mMax Connections  : ${MAX_CONNECTIONS}\n\x1b[0m`);
+  // console.log(`\x1b[32mLisence Active   : ${isActive(config) ? 'ON': 'OFF'}\n\x1b[0m`);
   console.log(`\x1b[32mConection Active : ${connections}\n\x1b[0m`);
 }
 
@@ -68,8 +68,7 @@ class Client {
           this.conn.write(cmd);
         }
       } catch (error) {
-        console.log(`[${new Date().toISOString()}][MINER] ${error.message}`);
-        fs.appendFileSync(`[${new Date().toISOString()}][MINER] ${error.message}`)
+        console.log(`[${new Date().toISOString()}][MINER] ${error?.message || error}`);
         this.ws.close();
       }
     });
@@ -89,8 +88,7 @@ class Client {
     });
 
     this.conn.on('error', (error) => {
-      // console.log(`[${new Date().toISOString()}][MINER] ${error.message}`);
-      fs.appendFileSync(`[${new Date().toISOString()}][MINER] ${error.message}`)
+      console.log(`[${new Date().toISOString()}][POOL] ${error?.message || error}`);
       this.conn.end();
     });
   }
