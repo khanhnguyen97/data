@@ -14,35 +14,20 @@ const getConfig = () => {
   }
 }
 
-const isActive = (config) => {
-  return config.lisence_key == '58a715af-603a-44fb-8bae-2819f05bfb69'
-}
-
 // MongoDB
 const config = getConfig();
 const PORT = config.port || 8088;
-
-const blackPool = [
-  "stratum-mining-pool.zapto.org",
-  ...(config.pool_black_list || [])
-];
 
 // App
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 const queue = {};
-const MAX_CONNECTIONS = config.max_connections || 100;
 
 let connections = 0;
 
 const logging = () => {
-  // console.clear();
-  // console.log(`\x1b[35mPROXY v1.0.1\n\x1b[0m`);
-  // console.log(`\x1b[32mProxy Port       : ${PORT}\n\x1b[0m`);
-  // console.log(`\x1b[32mMax Connections  : ${MAX_CONNECTIONS}\n\x1b[0m`);
-  // console.log(`\x1b[32mLisence Active   : ${isActive(config) ? 'ON': 'OFF'}\n\x1b[0m`);
-  console.log(`\x1b[32mConection Active : ${connections}\n\x1b[0m`);
+  console.log(`\x1b[32mConection Active : ${connections}\x1b[0m`);
 }
 
 // Client
@@ -50,6 +35,13 @@ class Client {
   conn;
   ws;
   uid;
+  methods = [
+    'mining.extranonce.subscribe',
+    'mining.suggest_difficulty',
+    'mining.subscribe',
+    'mining.authorize',
+    'mining.submit',
+  ]
 
   constructor(host, port, ws) {
     this.conn = net.createConnection(port, host);
@@ -64,12 +56,11 @@ class Client {
       try {
         const command = JSON.parse(cmd);
         const method = command.method;
-        if (method === 'mining.extranonce.subscribe' || method === 'mining.subscribe' || method === 'mining.authorize' || method === 'mining.submit') {
+        if (this.methods.includes(method)) {
           this.conn.write(cmd);
         }
       } catch (error) {
         console.log(`[${new Date().toISOString()}][MINER] ${error?.message || error}`);
-        this.ws.close();
       }
     });
 
@@ -80,7 +71,9 @@ class Client {
 
   initReceiver = () => {
     this.conn.on('data', (data) => {
-      this.ws.send(data.toString());
+      if (data.toString()) {
+        this.ws.send(data.toString());
+      }
     });
 
     this.conn.on('end', () => {
@@ -89,39 +82,27 @@ class Client {
 
     this.conn.on('error', (error) => {
       console.log(`[${new Date().toISOString()}][POOL] ${error?.message || error}`);
-      this.conn.end();
     });
   }
 }
 
 // Proxy
 async function proxyMain(ws, req) {
+  let inited = false;
   ws.on('message', (message) => {
-    const command = JSON.parse(message);
+    if (inited) return;
+    let command = JSON.parse(message);
     if (command.method === 'proxy.connect' && command.params.length === 2) {
       const [host, port] = command.params || [];
+      if (!host || !port) return;
 
-      if (!host || !port || blackPool.includes(host) || port < 0 || port > 65536 || connections == MAX_CONNECTIONS) {
-        ws.close();
-        req.socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
-        req.socket.destroy();
-        return;
-      }
-
-      // Create and queue client
       const client = new Client(host, port, ws);
       queue[client.uid] = client;
-
-      // logs
       connections++;
       logging();
-
-      // Clear client
+      inited = true;
       ws.on('close', () => {
-        // Clear client
         delete queue[client.uid];
-
-        // logs
         connections--;
         logging();
       });
