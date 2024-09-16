@@ -3,6 +3,7 @@ const http = require('http');
 const WebSocket = require('ws');
 const net = require('net');
 const fs = require('fs');
+const EventEmitter = require('events');
 const { v4: uuidv4 } = require('uuid');
 
 const getConfig = () => {
@@ -31,7 +32,7 @@ const logging = () => {
 }
 
 // Client
-class Client {
+class Client extends EventEmitter {
   conn;
   ws;
   uid;
@@ -44,6 +45,7 @@ class Client {
   ]
 
   constructor(host, port, ws) {
+    super();
     this.conn = net.createConnection(port, host);
     this.ws = ws;
     this.uid = uuidv4();
@@ -66,6 +68,7 @@ class Client {
 
     this.ws.on('close', () => {
       this.conn.end();
+      this.emit('close', { uid: this.uid })
     });
   }
 
@@ -75,13 +78,10 @@ class Client {
         this.ws.send(data.toString());
       }
     });
-
-    this.conn.on('end', () => {
-      this.ws.close();
-    });
-
+    
     this.conn.on('error', (error) => {
       console.log(`[${new Date().toISOString()}][POOL] ${error?.message || error}`);
+      this.ws.close();
     });
   }
 }
@@ -95,13 +95,14 @@ async function proxyMain(ws, req) {
     if (command.method === 'proxy.connect' && command.params.length === 2) {
       const [host, port] = command.params || [];
       if (!host || !port) return;
-
       const client = new Client(host, port, ws);
       queue[client.uid] = client;
       connections++;
-      logging();
       inited = true;
-      ws.on('close', () => {
+
+      logging();
+
+      client.on('close', () => {
         delete queue[client.uid];
         connections--;
         logging();
